@@ -1,0 +1,338 @@
+---
+title: "Credit Card Fraud Detection"
+author: "Dilly Nguyen"
+date: "2026-01-15"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(themis)
+library(pROC)
+library(PRROC)
+library(ranger)
+library(glmnet)
+
+options(yardstick.event_first = FALSE)
+tidymodels_prefer()
+set.seed(42)
+```
+
+```{r}
+
+# ---------------------------
+# Load data
+# ---------------------------
+
+df <- read_csv("creditcard.csv", show_col_types = FALSE)
+stopifnot("Class" %in% names(df))
+
+df <- df %>%
+mutate(Class = factor(Class, levels = c(0, 1)))  # keep order: 0 then 1
+
+cat("Rows:", nrow(df), "\n")
+cat("Columns:", ncol(df), "\n")
+cat("Class counts:\n")
+print(table(df$Class))
+cat("Fraud rate:", mean(as.integer(as.character(df$Class))), "\n\n")
+
+```
+
+```{r}
+# ---------------------------
+# Quick EDA plots
+# ---------------------------
+df %>%
+count(Class) %>%
+ggplot(aes(x = Class, y = n)) +
+geom_col() +
+labs(title = "Class Distribution (Imbalance)", y = "Count") +
+theme_minimal()
+
+df %>%
+ggplot(aes(x = Amount)) +
+geom_histogram(bins = 60) +
+labs(title = "Transaction Amount Distribution", y = "Count") +
+theme_minimal()
+```
+
+```{r}
+# ---------------------------
+# Train/Test split
+# ---------------------------
+
+split <- initial_split(df, prop = 0.8, strata = Class)
+train <- training(split)
+test  <- testing(split)
+
+cat("\nTrain distribution:\n"); print(table(train$Class))
+cat("\nTest distribution:\n");  print(table(test$Class))
+```
+
+```{r}
+# ---------------------------
+# Metrics
+# ---------------------------
+cv_metrics <- metric_set(roc_auc)
+
+calc_prob_metrics <- function(truth_factor, prob_fraud) {
+tibble(
+pr_auc  = pr_auc_vec(truth = truth_factor, estimate = prob_fraud, event_level = "second"),
+roc_auc = roc_auc_vec(truth = truth_factor, estimate = prob_fraud, event_level = "second")
+)
+}
+```
+
+```{r}
+# ---------------------------
+# Helper functions
+# ---------------------------
+
+eval_threshold <- function(truth_factor, prob_fraud, threshold = 0.5) {
+pred_class <- factor(if_else(prob_fraud >= threshold, "1", "0"),
+levels = c("0", "1"))
+
+list(
+threshold = threshold,
+precision = precision_vec(truth_factor, pred_class, event_level = "second"),
+recall    = recall_vec(truth_factor, pred_class, event_level = "second"),
+f1        = f_meas_vec(truth_factor, pred_class, event_level = "second"),
+confusion_matrix = conf_mat(
+data.frame(truth = truth_factor, estimate = pred_class),
+truth = truth, estimate = estimate
+)
+)
+}
+
+best_threshold_by_f1 <- function(truth_factor, prob_fraud, grid_n = 300) {
+thresholds <- seq(0, 1, length.out = grid_n)
+scores <- map_dfr(thresholds, function(t) {
+pred_class <- factor(if_else(prob_fraud >= t, "1", "0"),
+levels = c("0", "1"))
+tibble(
+threshold = t,
+precision = precision_vec(truth_factor, pred_class, event_level = "second"),
+recall    = recall_vec(truth_factor, pred_class, event_level = "second"),
+f1        = f_meas_vec(truth_factor, pred_class, event_level = "second")
+)
+})
+scores %>% slice_max(f1, n = 1, with_ties = FALSE)
+}
+
+plot_pr_curve <- function(truth_factor, prob_fraud, title_txt) {
+scores_pos <- prob_fraud[truth_factor == "1"]
+scores_neg <- prob_fraud[truth_factor == "0"]
+pr <- PRROC::pr.curve(scores.class0 = scores_pos,
+scores.class1 = scores_neg,
+curve = TRUE)
+plot(pr, main = title_txt)
+invisible(pr)
+}
+```
+
+```{r}
+# ---------------------------
+# Preprocessing recipe
+# ---------------------------
+
+base_recipe <- recipe(Class ~ ., data = train) %>%
+step_normalize(all_predictors())
+
+down_recipe <- base_recipe %>%
+step_downsample(Class, under_ratio = 1)
+```
+
+```{r}
+folds <- vfold_cv(train, v = 5, strata = Class)
+
+# -----------------------------
+# Model 1: Logistic Regression
+# -----------------------------
+
+log_spec <- logistic_reg(penalty = 0.01, mixture = 1) %>%
+set_engine("glmnet") %>%
+set_mode("classification")
+
+log_wf <- workflow() %>%
+add_recipe(down_recipe) %>%
+add_model(log_spec)
+
+log_cv <- fit_resamples(
+log_wf,
+resamples = folds,
+metrics = cv_metrics,
+control = control_resamples(save_pred = TRUE)
+)
+
+cat("\n--- Logistic CV metrics (ROC AUC) ---\n")
+print(collect_metrics(log_cv))
+
+log_fit <- fit(log_wf, data = train)
+
+log_test_pred <- predict(log_fit, test, type = "prob") %>%
+bind_cols(test %>% select(Class)) %>%
+mutate(p_fraud = .pred_1)
+
+cat("\n--- Logistic TEST metrics (PR AUC + ROC AUC) ---\n")
+print(calc_prob_metrics(log_test_pred$Class, log_test_pred$p_fraud))
+
+# Threshold tuning split from TRAIN
+
+val_split <- initial_split(train, prop = 0.8, strata = Class)
+train2 <- training(val_split)
+val    <- testing(val_split)
+
+log_fit_train2 <- fit(log_wf, data = train2)
+
+val_pred <- predict(log_fit_train2, val, type = "prob") %>%
+bind_cols(val %>% select(Class)) %>%
+mutate(p_fraud = .pred_1)
+
+best_thr_log <- best_threshold_by_f1(val_pred$Class, val_pred$p_fraud, grid_n = 300)
+cat("\nBest threshold (Logistic) by F1 on validation:\n")
+print(best_thr_log)
+
+chosen_thr_log <- best_thr_log$threshold[[1]]
+log_thr_eval <- eval_threshold(log_test_pred$Class, log_test_pred$p_fraud, chosen_thr_log)
+
+cat("\n--- Logistic TEST at chosen threshold ---\n")
+cat("Threshold:", log_thr_eval$threshold, "\n")
+cat("Precision:", log_thr_eval$precision, "\n")
+cat("Recall:", log_thr_eval$recall, "\n")
+cat("F1:", log_thr_eval$f1, "\n\n")
+print(log_thr_eval$confusion_matrix)
+
+# -----------------------------
+# Model 2: Random Forest
+# -----------------------------
+
+rf_spec <- rand_forest(
+mtry = tune(),
+min_n = tune(),
+trees = 500
+) %>%
+set_engine("ranger", probability = TRUE, importance = "impurity") %>%
+set_mode("classification")
+
+rf_wf <- workflow() %>%
+add_recipe(down_recipe) %>%
+add_model(rf_spec)
+
+rf_grid <- grid_regular(
+mtry(range = c(4, 20)),
+min_n(range = c(2, 20)),
+levels = 5
+)
+
+rf_tune <- tune_grid(
+rf_wf,
+resamples = folds,
+grid = rf_grid,
+metrics = cv_metrics,
+control = control_grid(save_pred = TRUE)
+)
+
+cat("\n--- RF CV top results (by ROC AUC) ---\n")
+print(show_best(rf_tune, metric = "roc_auc", n = 5))
+
+best_rf <- select_best(rf_tune, metric = "roc_auc")
+rf_final_wf <- finalize_workflow(rf_wf, best_rf)
+
+rf_fit <- fit(rf_final_wf, data = train)
+
+rf_test_pred <- predict(rf_fit, test, type = "prob") %>%
+bind_cols(test %>% select(Class)) %>%
+mutate(p_fraud = .pred_1)
+
+cat("\n--- RF TEST metrics (PR AUC + ROC AUC) ---\n")
+print(calc_prob_metrics(rf_test_pred$Class, rf_test_pred$p_fraud))
+
+# Threshold tuning for RF (same validation split)
+
+rf_fit_train2 <- fit(rf_final_wf, data = train2)
+
+rf_val_pred <- predict(rf_fit_train2, val, type = "prob") %>%
+bind_cols(val %>% select(Class)) %>%
+mutate(p_fraud = .pred_1)
+
+best_thr_rf <- best_threshold_by_f1(rf_val_pred$Class, rf_val_pred$p_fraud, grid_n = 300)
+cat("\nBest threshold (RF) by F1 on validation:\n")
+print(best_thr_rf)
+
+chosen_thr_rf <- best_thr_rf$threshold[[1]]
+rf_thr_eval <- eval_threshold(rf_test_pred$Class, rf_test_pred$p_fraud, chosen_thr_rf)
+
+cat("\n--- RF TEST at chosen threshold ---\n")
+cat("Threshold:", rf_thr_eval$threshold, "\n")
+cat("Precision:", rf_thr_eval$precision, "\n")
+cat("Recall:", rf_thr_eval$recall, "\n")
+cat("F1:", rf_thr_eval$f1, "\n\n")
+print(rf_thr_eval$confusion_matrix)
+```
+
+```{r}
+# ---------------------------
+# Model comparison table
+# ---------------------------
+
+compare <- tibble(
+model = c("Logistic(glmnet)+downsample", "RandomForest(ranger)+downsample"),
+test_pr_auc = c(
+pr_auc_vec(log_test_pred$Class, log_test_pred$p_fraud, event_level = "second"),
+pr_auc_vec(rf_test_pred$Class, rf_test_pred$p_fraud, event_level = "second")
+),
+test_roc_auc = c(
+roc_auc_vec(log_test_pred$Class, log_test_pred$p_fraud, event_level = "second"),
+roc_auc_vec(rf_test_pred$Class, rf_test_pred$p_fraud, event_level = "second")
+),
+chosen_threshold = c(chosen_thr_log, chosen_thr_rf),
+test_precision_at_threshold = c(log_thr_eval$precision, rf_thr_eval$precision),
+test_recall_at_threshold = c(log_thr_eval$recall, rf_thr_eval$recall),
+test_f1_at_threshold = c(log_thr_eval$f1, rf_thr_eval$f1)
+)
+
+cat("\n========================\nMODEL COMPARISON\n========================\n")
+print(compare)
+
+```
+
+```{r}
+# ---------------------------
+# PR curves
+# ---------------------------
+par(mfrow = c(1, 2))
+plot_pr_curve(log_test_pred$Class, log_test_pred$p_fraud, "PR Curve — Logistic")
+plot_pr_curve(rf_test_pred$Class,  rf_test_pred$p_fraud,  "PR Curve — Random Forest")
+par(mfrow = c(1, 1))
+```
+
+
+
+```{r}
+# ---------------------------
+# Feature importance (RF)
+# ---------------------------
+
+rf_engine <- extract_fit_engine(rf_fit)
+imp <- ranger::importance(rf_engine)
+
+imp_tbl <- tibble(
+feature = names(imp),
+importance = as.numeric(imp)
+) %>%
+arrange(desc(importance)) %>%
+slice_head(n = 15)
+
+cat("\nTop 15 RF feature importances:\n")
+print(imp_tbl)
+
+ggplot(imp_tbl, aes(x = reorder(feature, importance), y = importance)) +
+geom_col() +
+coord_flip() +
+labs(title = "Top Feature Importances (Random Forest)",
+x = "Feature", y = "Importance") +
+theme_minimal()
+```
+
+
