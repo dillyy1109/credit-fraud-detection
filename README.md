@@ -4,32 +4,29 @@ Machine learning project that detects fraudulent credit card transactions using 
 
 🌐 **Live Demo:** https://dillyy1109.github.io/credit-fraud-detection/
 
+📄 **Interactive Report:** https://dillyy1109.github.io/credit-fraud-detection/creditfrauddetection.html
+
 ---
 
 # Project Overview
 
-Credit card fraud is a challenging classification problem because fraudulent transactions make up only a tiny fraction of all transactions. In highly imbalanced datasets like this, traditional accuracy can be misleading.
+Credit card fraud is a highly imbalanced classification problem where fraudulent transactions account for only a tiny fraction of all observations. In this setting, traditional accuracy can be misleading because a model can achieve high accuracy while failing to detect fraudulent transactions.
 
-This project develops and compares multiple machine learning models to identify fraudulent transactions while focusing on metrics that better reflect real-world fraud detection performance.
+This project develops and compares two machine learning models—**Logistic Regression** and **Random Forest**—to identify fraudulent credit card transactions. The models are evaluated using metrics that are more appropriate for imbalanced datasets, with **Precision-Recall AUC (PR AUC)** serving as the primary evaluation metric.
 
 ---
 
 # Project Highlights
 
-- Built end-to-end fraud detection pipeline in **R**
+- Built an end-to-end machine learning pipeline in **R**
 - Compared **Logistic Regression** and **Random Forest**
-- Handled severe class imbalance using **downsampling**
-- Tuned classification threshold to maximize **F1 Score**
+- Addressed severe class imbalance using **downsampling**
+- Tuned the classification threshold to maximize **F1 Score**
 - Evaluated models using **Precision-Recall AUC**, ROC AUC, Precision, Recall, and F1 Score
-- Visualized model performance and feature importance
+- Analyzed feature importance to identify key predictors of fraud
 
 ---
-## Live Report
 
-🌐 **Interactive HTML Report:**  
-https://dillyy1109.github.io/credit-fraud-detection/creditfrauddetection.html
-
----
 # Dataset
 
 **Credit Card Fraud Detection Dataset**
@@ -42,31 +39,31 @@ Target variable:
 - **0** → Legitimate transaction
 - **1** → Fraudulent transaction
 
-The dataset is highly imbalanced, making fraud detection significantly more difficult than standard classification problems.
+The dataset is highly imbalanced, making fraud detection significantly more challenging than standard classification tasks.
 
-> The dataset is not included in this repository due to licensing and size restrictions.
+> **Note:** The dataset is not included in this repository due to licensing and size restrictions.
 
-### Class Distribution
+## Class Distribution
 
-![Class Distribution](images/Screenshot 2026-01-15 at 11.10.02.png)
+![Class Distribution](images/class_distribution.png)
 
-*Figure 1. Distribution of fraudulent and non-fraudulent transactions.*
+*Figure 1. Fraudulent transactions represent only a very small proportion of the dataset, illustrating the severe class imbalance.*
 
-### Transaction Amount Distribution
+## Transaction Amount Distribution
 
-![Transaction Amount Distribution](images/[amount_distribution.png](https://github.com/dillyy1109/credit-fraud-detection/blob/main/images/Screenshot%202026-01-15%20at%2011.10.08.png))
+![Transaction Amount Distribution](images/transaction_amount_distribution.png)
 
-*Figure 2. Most transactions are relatively small, with a long right tail representing a few high-value transactions.*
+*Figure 2. Most transactions involve relatively small amounts, while a small number of high-value transactions create a heavily right-skewed distribution.*
 
 ---
 
 # Tech Stack
 
-**Language**
+### Programming Language
 
 - R
 
-**Libraries**
+### Libraries
 
 - tidymodels
 - ranger
@@ -74,7 +71,7 @@ The dataset is highly imbalanced, making fraud detection significantly more diff
 - dplyr
 - ggplot2
 
-**Machine Learning**
+### Machine Learning Models
 
 - Logistic Regression
 - Random Forest
@@ -83,33 +80,29 @@ The dataset is highly imbalanced, making fraud detection significantly more diff
 
 # Methodology
 
-## 1. Data Preparation
+## Data Preparation
 
 - Stratified 80/20 train-test split
-- Normalized numerical features
-- Applied downsampling to the majority class during training
+- Feature normalization
+- Downsampling of the majority class (training data only)
 
----
+## Model Development
 
-## 2. Model Development
-
-Two supervised learning models were trained:
+Two supervised learning models were trained and compared:
 
 ### Logistic Regression
 
-- Baseline linear classifier
-- Regularized using glmnet
+- Baseline linear classification model
+- Regularized using **glmnet**
 
 ### Random Forest
 
-- Ensemble tree-based classifier
-- Implemented using ranger
+- Ensemble tree-based classification model
+- Implemented using **ranger**
 
----
+## Model Evaluation
 
-## 3. Model Evaluation
-
-Because fraud detection involves extremely imbalanced data, model performance was evaluated using:
+Because fraud detection involves highly imbalanced data, the following evaluation metrics were used:
 
 - Precision-Recall AUC (Primary Metric)
 - ROC AUC
@@ -117,38 +110,77 @@ Because fraud detection involves extremely imbalanced data, model performance wa
 - Recall
 - F1 Score
 
-The decision threshold was optimized using the validation set to maximize the F1 Score.
+The classification threshold was optimized using the validation set to maximize the F1 Score.
 
 ---
 
 # Results
 
-The Random Forest model outperformed Logistic Regression across the primary evaluation metrics.
+The **Random Forest** model achieved better performance than Logistic Regression on the primary evaluation metric, **Precision-Recall AUC**, demonstrating stronger ability to identify fraudulent transactions.
 
-Key observations:
+## Model Comparison
 
-- Higher Precision-Recall AUC
-- Improved recall for fraudulent transactions
-- Better balance between precision and recall after threshold tuning
-- Feature importance analysis identified the most influential transaction characteristics
+| Model | PR AUC |
+|--------|--------:|
+| Logistic Regression | 0.659 |
+| Random Forest | **0.701** |
 
-*(Replace this section with your actual evaluation metrics if available.)*
+---
+
+## Logistic Regression Performance
+
+![Logistic Regression PR Curve](images/pr_curve_logistic.png)
+
+*Figure 3. Precision-Recall curve for the Logistic Regression model (PR AUC = 0.659).*
+
+---
+
+## Random Forest Performance
+
+![Random Forest PR Curve](images/pr_curve_random_forest.png)
+
+*Figure 4. Precision-Recall curve for the Random Forest model (PR AUC = 0.701). The Random Forest achieved stronger overall performance on this highly imbalanced dataset.*
+
+---
+
+## Random Forest Feature Importance
+
+![Feature Importance](images/feature_importance.png)
+
+*Figure 5. Random Forest feature importance. Variables **V14**, **V10**, and **V12** were identified as the most influential predictors of fraudulent transactions.*
+
+---
+
+# Key Findings
+
+- Random Forest outperformed Logistic Regression on Precision-Recall AUC.
+- Downsampling improved the model's ability to identify rare fraud cases.
+- V14, V10, and V12 were the strongest predictors of fraudulent transactions.
+- Precision-Recall AUC provided a more meaningful evaluation than accuracy due to severe class imbalance.
+
+---
+
+# Business Impact
+
+Fraud detection systems operate on highly imbalanced datasets where missing fraudulent transactions can result in substantial financial losses. This project demonstrates how selecting appropriate evaluation metrics and machine learning techniques can improve fraud detection performance while reducing reliance on misleading accuracy metrics.
 
 ---
 
 # Repository Structure
 
-```
+```text
 credit-fraud-detection/
 │
-├── images/
-│   ├── pr_curve.png
-│   ├── roc_curve.png
-│   └── feature_importance.png
-│
+├── README.md
 ├── creditfrauddetection.Rmd
 ├── creditfrauddetection.html
-├── README.md
+│
+└── images/
+    ├── class_distribution.png
+    ├── transaction_amount_distribution.png
+    ├── pr_curve_logistic.png
+    ├── pr_curve_random_forest.png
+    └── feature_importance.png
 ```
 
 ---
@@ -157,27 +189,27 @@ credit-fraud-detection/
 
 Potential enhancements include:
 
-- SMOTE oversampling
-- Cost-sensitive learning
-- XGBoost implementation
-- Hyperparameter tuning
-- Time-based train/test split
-- Probability calibration
-- Model deployment using Shiny
+- Apply SMOTE instead of random downsampling
+- Implement XGBoost and LightGBM
+- Perform hyperparameter tuning
+- Explore cost-sensitive learning
+- Evaluate probability calibration
+- Deploy the model using Shiny
 
 ---
 
-# Key Skills Demonstrated
+# Skills Demonstrated
 
 - Machine Learning
-- Predictive Modeling
 - Fraud Detection
+- Predictive Modeling
 - Classification
-- Feature Engineering
-- Threshold Optimization
+- Data Preprocessing
 - Model Evaluation
+- Feature Importance Analysis
 - Data Visualization
 - R Programming
+- tidymodels
 
 ---
 
@@ -190,7 +222,4 @@ Data Science student at DePaul University with interests in machine learning, pr
 - LinkedIn: https://linkedin.com/in/dilly1109
 - GitHub: https://github.com/dillyy1109
 
----
-
-If you found this project interesting, feel free to connect with me on LinkedIn or explore my other machine learning projects.
-
+If you found this project interesting, feel free to connect with me or explore my other machine learning projects.
