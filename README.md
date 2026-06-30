@@ -24,7 +24,12 @@ This project develops and compares multiple machine learning models to identify 
 - Visualized model performance and feature importance
 
 ---
+## Live Report
 
+🌐 **Interactive HTML Report:**  
+https://dillyy1109.github.io/credit-fraud-detection/creditfrauddetection.html
+
+---
 # Dataset
 
 **Credit Card Fraud Detection Dataset**
