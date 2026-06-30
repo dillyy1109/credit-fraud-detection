@@ -46,6 +46,18 @@ The dataset is highly imbalanced, making fraud detection significantly more diff
 
 > The dataset is not included in this repository due to licensing and size restrictions.
 
+### Class Distribution
+
+![Class Distribution](images/Screenshot 2026-01-15 at 11.10.02.png)
+
+*Figure 1. Distribution of fraudulent and non-fraudulent transactions.*
+
+### Transaction Amount Distribution
+
+![Transaction Amount Distribution](images/[amount_distribution.png](https://github.com/dillyy1109/credit-fraud-detection/blob/main/images/Screenshot%202026-01-15%20at%2011.10.08.png))
+
+*Figure 2. Most transactions are relatively small, with a long right tail representing a few high-value transactions.*
+
 ---
 
 # Tech Stack
